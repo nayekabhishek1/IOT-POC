@@ -1,0 +1,114 @@
+Configure Source Connector(In this case it is MQTT)
+curl -d @"D:/Project Docs/IOT POC/Connectors/connect-mqtt-source.json" -H "Content-Type: application/json" -X POST http://localhost:8083/connectors
+
+Update a connector
+curl -s -X PUT -H 'Content-Type: application/json' --data @"D:/Project Docs/IOT POC/Connectors/connect-mqtt-source.json" http://localhost:8083/connectors/mqtt-source/config
+
+"value.converter": "org.apache.kafka.connect.json.JsonConverter",
+org.apache.kafka.connect.converters.ByteArrayConverter  
+
+Test Source connector(Publish a messgae to MQTT broker using a mqtt client)
+MQTT Publish command:
+docker run -it --rm --name mqtt-publisher --network iotpoc_default efrecon/mqtt-client pub -h mosquitto  -t "mqtt-test" -m "{\"id\":543216,\"message\":\"This is a new test message\"}"
+
+MQTT Subscribe command:
+docker run -it --rm --name mqtt-subscriber --network iotpoc_default efrecon/mqtt-client sub -h mosquitto -t "mqtt-test"
+
+
+Listen to kafka topic(in this case: connect-custom)
+docker run --rm confluentinc/cp-kafka:5.1.0 kafka-console-consumer --network iotpoc_default --bootstrap-server kafka:19091 --topic connect-custom --from-beginning
+
+Configure Sink COnnector(In this case it is Mongo)
+curl -d @"D:/Project Docs/IOT POC/Connectors/connect-mongodb-sink.json" -H "Content-Type: application/json" -X POST http://localhost:8083/connectors
+
+
+
+docker run --rm confluentinc/cp-kafka:5.1.0 kafka-console-consumer  --bootstrap-server localhost:9091 --topic connect-custom --from-beginning
+
+
+
+docker run -it --rm --name mqtt-publisher  efrecon/mqtt-client pub -h mosquitto  -t "mqtt-test" -m "{\"id\":1234,\"message\":\"This is a test\"}"
+
+
+Command to install source and sink connectors from confluent-hub(Enter the kafka-connect container bash shell)
+e.g MqttSourceConnector installation
+Command : confluent-hub install confluentinc/kafka-connect-mqtt:latest
+
+e.g MongoDB sink connector
+Command: confluent-hub install hpgrahsl/kafka-connect-mongodb:1.4.0
+
+
+cp -R -f /usr/share/confluent-hub-components/confluentinc-kafka-connect-mqtt/lib/* /usr/share/java/kafka
+cp -R -f /usr/share/confluent-hub-components/hpgrahsl-kafka-connect-mongodb/lib/* /usr/share/java/kafka
+
+
+Enter container in root mode
+docker exec -u 0 -it 04726a3aa3c2 /bin/sh
+
+
+
+Clean up
+curl -X DELETE http://localhost:8083/connectors/mqtt-source
+curl -X DELETE http://localhost:8083/connectors/mongodb-sink
+
+
+produce data from console using mqtt client : 
+docker run -it --rm --name mqtt-publisher --network iotpoc_default efrecon/mqtt-client pub -h mosquitto  -t "mqtt-test" -m "{\"id\":1234,\"message\":\"This is a message from bus1234\"}"
+
+
+
+
+MQTT message generator
+docker run --rm -it \
+    --entrypoint /opt/go/bin/ais-mqtt \
+    landoop/example-mqtt \
+        -server tcp://mosquitto:1883
+
+
+How to send some data to kafka topic directly from console - Gitbash
+docker run --rm --interactive --network iotpoc_default confluentinc/cp-kafkacat kafkacat -b kafka:19091 -t connect-custom -P <<EOF
+{"vehicleId":"71656143-1b41-4a87-894f-5d934eb6861f","vehicleType":"Taxi","routeId":"Route-43","longitude":"-169.95","latitude":"-40.96","timestamp":"2021-05-11 16:19:12","speed":"76.0","fuelLevel":"19.0"}
+{"vehicleId":"05651d64-cb7b-4b63-95f8-7f4e1c7fdce5","vehicleType":"Taxi","routeId":"Route-6","longitude":"97.99","latitude":"78.84","timestamp":"2021-05-11 16:19:12","speed":"68.0","fuelLevel":"4.0"}
+{"vehicleId":"a7de70aa-e28a-4ea6-9cbf-8716e00ee68e","vehicleType":"Taxi","routeId":"Route-31","longitude":"-79.41","latitude":"-54.5","timestamp":"2021-05-11 16:19:12","speed":"84.0","fuelLevel":"20.0"}
+EOF
+
+
+
+
+
+KSQL cli commands
+1. docker-compose -f .\docker-compose-kafka-mqtt.yml exec ksql-cli ksql http://ksql-server:8088   //Make sure KSQL server is up and running
+
+Show all the topics --> show topics;
+Show all the streams --> show streams;
+set offset earliest before select statement - > SET 'auto.offset.reset'='earliest';
+
+Create Streams from topic :
+CREATE STREAM IOTDATASTREAM (vehicleId VARCHAR, vehicleType VARCHAR, routeId VARCHAR , longitude VARCHAR ,latitude VARCHAR ,timestamp VARCHAR ,speed VARCHAR , fuelLevel VARCHAR) WITH (KAFKA_TOPIC='connect-custom', VALUE_FORMAT='JSON');
+
+
+{"id":"1234","message":"This is a message from 1234"}
+
+Sample input : {"vehicleId":"0bf45cac-d1b8-4364-a906-980e1c2bdbcb","vehicleType":"Taxi","routeId":"Route-37}","longitude":"-95.255615","latitude":"33.49808","timestamp":"2017-10-16 12:31:03","speed":49.0,"fuelLevel":38.0}
+JMeter: {"vehicleId":"${__UUID}","vehicleType":"Taxi","routeId":"Route-${__Random(1, 100)}","longitude":"${__javaScript((Math.random() * (360) - 180).toFixed(2) * 1,)}","latitude":"${__javaScript((Math.random() * (180) - 90).toFixed(2) * 1,)}","timestamp":"${__timeShift(yyyy-MM-dd HH:mm:ss,,PT2H,,)}","speed":"${__Random(1, 100)}.0","fuelLevel":"${__Random(1,20)}.0"}
+
+
+Result response:
+{"vehicleId":"71656143-1b41-4a87-894f-5d934eb6861f","vehicleType":"Taxi","routeId":"Route-43","longitude":"-169.95","latitude":"-40.96","timestamp":"2021-05-11 16:19:12","speed":"76.0","fuelLevel":"19.0"}
+{"vehicleId":"05651d64-cb7b-4b63-95f8-7f4e1c7fdce5","vehicleType":"Taxi","routeId":"Route-6","longitude":"97.99","latitude":"78.84","timestamp":"2021-05-11 16:19:12","speed":"68.0","fuelLevel":"4.0"}
+{"vehicleId":"a7de70aa-e28a-4ea6-9cbf-8716e00ee68e","vehicleType":"Taxi","routeId":"Route-31","longitude":"-79.41","latitude":"-54.5","timestamp":"2021-05-11 16:19:12","speed":"84.0","fuelLevel":"20.0"}
+{"vehicleId":"a4f368ff-28fb-4908-aee7-3947ae42aef6","vehicleType":"Taxi","routeId":"Route-69","longitude":"97.57","latitude":"-63.0","timestamp":"2021-05-11 16:19:12","speed":"88.0","fuelLevel":"16.0"}
+{"vehicleId":"e312b0e7-4fd7-4c0f-af5d-c44029ea57e3","vehicleType":"Taxi","routeId":"Route-41","longitude":"9.24","latitude":"74.68","timestamp":"2021-05-11 16:19:12","speed":"95.0","fuelLevel":"15.0"}
+{"vehicleId":"675004d7-51db-4d08-8007-e6251f44641f","vehicleType":"Taxi","routeId":"Route-90","longitude":"-112.23","latitude":"-53.07","timestamp":"2021-05-11 16:19:12","speed":"39.0","fuelLevel":"10.0"}
+{"vehicleId":"a3af5adc-00f6-4eb8-a40d-1b164f357471","vehicleType":"Taxi","routeId":"Route-39","longitude":"-179.8","latitude":"86.06","timestamp":"2021-05-11 16:19:12","speed":"36.0","fuelLevel":"17.0"}
+{"vehicleId":"2e9b4265-80b4-4ea6-a2b1-678f096affb7","vehicleType":"Taxi","routeId":"Route-5","longitude":"14.18","latitude":"-60.22","timestamp":"2021-05-11 16:19:12","speed":"63.0","fuelLevel":"18.0"}
+{"vehicleId":"05202cd5-9a71-409b-a96e-b1481f50149c","vehicleType":"Taxi","routeId":"Route-37","longitude":"-60.36","latitude":"-66.48","timestamp":"2021-05-11 16:19:12","speed":"62.0","fuelLevel":"5.0"}
+{"vehicleId":"f2a61ea9-5da6-46a3-bcce-87f1b1eb11e8","vehicleType":"Taxi","routeId":"Route-89","longitude":"84.6","latitude":"-37.09","timestamp":"2021-05-11 16:19:12","speed":"26.0","fuelLevel":"7.0"}
+{"vehicleId":"4f727cf2-5758-4e0e-86bc-d05c932e4b73","vehicleType":"Taxi","routeId":"Route-86","longitude":"-58.45","latitude":"-56.63","timestamp":"2021-05-11 16:19:12","speed":"81.0","fuelLevel":"14.0"}
+{"vehicleId":"28eb75e2-e680-4af4-ab6f-a137bcb1ef68","vehicleType":"Taxi","routeId":"Route-72","longitude":"28.31","latitude":"7.45","timestamp":"2021-05-11 16:19:12","speed":"7.0","fuelLevel":"17.0"}
+{"vehicleId":"3253b171-4c92-41d5-a990-1d55c27c238d","vehicleType":"Taxi","routeId":"Route-6","longitude":"-141.87","latitude":"-27.68","timestamp":"2021-05-11 16:19:12","speed":"63.0","fuelLevel":"6.0"}
+{"vehicleId":"45138dfe-468a-4eff-8ff6-bf6fd1e75184","vehicleType":"Taxi","routeId":"Route-66","longitude":"-117.09","latitude":"-3.75","timestamp":"2021-05-11 16:19:12","speed":"28.0","fuelLevel":"2.0"}
+{"vehicleId":"46112367-90d6-46d5-80c1-95070365ea37","vehicleType":"Taxi","routeId":"Route-28","longitude":"-102.44","latitude":"53.11","timestamp":"2021-05-11 16:19:12","speed":"49.0","fuelLevel":"2.0"}
+{"vehicleId":"68eace3a-94c9-4734-8c12-075148776509","vehicleType":"Taxi","routeId":"Route-85","longitude":"129.04","latitude":"18.19","timestamp":"2021-05-11 16:19:12","speed":"68.0","fuelLevel":"10.0"}
+{"vehicleId":"c1576b8c-b5a4-43c3-8e7f-d8c988c82be8","vehicleType":"Taxi","routeId":"Route-17","longitude":"56.95","latitude":"-76.86","timestamp":"2021-05-11 16:19:12","speed":"74.0","fuelLevel":"17.0"}
+{"vehicleId":"03239dfa-ea02-42b5-9632-8beaf84ea37d","vehicleType":"Taxi","routeId":"Route-89","longitude":"3.39","latitude":"48.05","timestamp":"2021-05-11 16:19:12","speed":"34.0","fuelLevel":"18.0"}

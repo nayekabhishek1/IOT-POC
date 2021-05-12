@@ -1,0 +1,11 @@
+# ./mongoke.yml
+schema: |
+    type test {
+        _id: ObjectId
+        message: String
+    }
+
+types:
+
+    test:
+        collection: MyCollection
